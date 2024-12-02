@@ -1,10 +1,48 @@
 ---
 title: "p8105_hw6_mh4588"
-author: "Maggie"
+author: "Maggie Hsu"
 date: "`r Sys.Date()`"
 output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) #Load libraries
+library(MASS) #load Mass library for variable selection
+remotes::install_github("ropensci/rnoaa")
+
+#Import data
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") |>
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) |>
+  dplyr::select(name, id, everything())
+
+homicide = read_csv("./homicide-data.csv") #Q2 homicide dataset
+birthweight = read_csv("./birthweight.csv") #Q3 birthweight dataset
+
+set.seed(8105) #set seed for randomization 
+```
+## Question 1
+```{r weather}
+
+```
+
+## Question 2
+```{r homicide}
+
+```
+
+## Question 3
+```{r birthweight}
+#Variable selection using stepwise criteria
+birthw_full <- lm(bwt~.,data=birthweight)
+birthw_stepwise <- stepAIC(birthw_full, direction = "both", trace = FALSE)
+
+summary(birthw_stepwise)
 ```
