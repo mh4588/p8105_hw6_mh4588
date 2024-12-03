@@ -97,14 +97,7 @@ output = vector("list", length = nrow(homicide_cities)) #output list
 purrr::map(homicide_cities, city_glm)
 ```
 ## Question 3
-```{r birthweight}
-#Model with birth length and gestational age
-birthw_lengthage <- lm(bwt~blength+gaweeks, data=birthweight)
-summary(birthw_lengthage)
-#Model with head circumference, length, sex, and interactions
-birthw_interactions <- lm(bwt~bhead+blength+babysex+bhead*blength+blength*babysex+bhead*babysex+bhead*babysex*blength, data=birthweight)
-summary(birthw_interactions)
-```
+
 ```{r bwt design}
 #Proposed design model
 #Variable selection using stepwise criteria and AIC/BIC criterion
@@ -123,12 +116,67 @@ birthw_bic <- lm(bwt ~ babysex + bhead + blength + delwt + fincome +
 summary(birthw_bic)
 
 ```
-I used the AIC and BIC criteria to select variables from the full model based on the lowest AIC or BIC value. Since the BIC-minimized model has a higher R-squared but less variables than the AIC-minimized model (less overfitting), I would go with the BIC model for this problem.
+I used the AIC (Akaike Info Criterion - compares model fit based on likelihood) and BIC (Bayesian Info Criterion - based on posterior probability) criteria to select variables from the full model based on the lowest AIC or BIC value. Since the BIC-minimized model has a similar R-squared but less variables than the AIC-minimized model (less overfitting), I would go with the BIC model for this problem.
+
 ```{r fitted residual}
 birthweight = add_predictions(birthweight, birthw_bic) #add fitted values
 birthweight = add_residuals(birthweight, birthw_bic) #add residual values
 
 #fitted vs. residual plot
-ggplot(data=birthweight)+aes(x=pred, y=resid)+geom_point() + labs(title="Fitted vs. Residual Values")+xlab("Fitted Values")+ylab("Residual Values")
+ggplot(data=birthweight)+aes(x=pred, y=resid, color=pred, alpha=0.5)+geom_point() + labs(title="Fitted vs. Residual Values")+xlab("Fitted Values")+ylab("Residual Values")
 ```
-My proposed model has a higher R-squared and adjusted R-squared than the two previous models birthw_lengthage and birthw_interactions
+```{r birthweight}
+#Model with birth length and gestational age
+birthw_lengthage <- lm(bwt~blength+gaweeks, data=birthweight)
+summary(birthw_lengthage)
+#Model with head circumference, length, sex, and interactions
+birthw_interactions <- lm(bwt~bhead+blength+babysex+bhead*blength+blength*babysex+bhead*babysex+bhead*babysex*blength, data=birthweight)
+summary(birthw_interactions)
+```
+
+```{r model comparison}
+#Cross validation
+cross_valid = #Create training and testing datasets
+  crossv_mc(birthweight, 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+    )
+
+#Compare models
+cross_valid = 
+  cross_valid |> 
+  mutate(
+    lm_bic  = map(
+      train, \(df) lm(bwt ~ babysex + bhead + blength + delwt + fincome + 
+    gaweeks + mrace + ppwt + smoken, data = df)
+    ),
+    lm_lengthage  = map(train, \(df) lm(bwt~blength+gaweeks, data = df)),
+    lm_interact  = map(
+      train, \(df) lm(bwt~bhead+blength+babysex+bhead*blength+blength*babysex+bhead*babysex+bhead*babysex*blength, data = df)
+      )
+    ) |> 
+  mutate( #Compare RMSE values between models
+    rmse_bic = map2_dbl(lm_bic, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_lengthage = map2_dbl(
+      lm_lengthage, test, \(mod, df) rmse(model = mod, data = df)
+      ),
+    rmse_interact = map2_dbl(
+      lm_interact, test, \(mod, df) rmse(model = mod, data = df))
+    )
+```
+
+```{r cv plots}
+cross_valid |> #compare RMSE values by model
+  dplyr::select(c("rmse_bic","rmse_lengthage","rmse_interact")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse, fill=model)) + geom_violin()+labs(title="Comparison of RMSE by Regression Model")
+```
+Based on the violin plots here, the length-age regression model has the highest cross-validated RMSE while the regression model with interactions generally has a somewhat higher RMSE than my BIC-criteria model, which generally has the lowest RMSE as shown here. 
+
+Additionally, my proposed model has a higher R-squared and adjusted R-squared than the two previous models birthw_lengthage and birthw_interactions which means that out of these models, the proposed model explains the most out of variation in birth weight.
