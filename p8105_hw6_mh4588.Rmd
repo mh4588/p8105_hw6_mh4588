@@ -35,9 +35,58 @@ set.seed(8105) #set seed for randomization
 
 ## Question 2
 ```{r homicide}
+homicide <- read_csv("./homicide-data.csv") #Import homicide dataset
+
+#Clean data
+homicide =  mutate(city_state = paste(city, state, sep=', '), homicide) |> #Create "city,state" variable
+  filter(city_state != c("Dallas, TX","Phoenix, AZ","Kansas City, MO")) |> #Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO
+   mutate(
+     solved = case_when(
+      disposition == c("Closed by arrest", "Closed without arrest") ~ 1, 
+      disposition == "Open/No arrest" ~ 0)
+     ) #Convert solved/unsolved to binary variable
+
+homicide = filter(homicide, victim_race == "White"| victim_race == "Black") |> #Select victim_race to only have observations where victim_race is white or black
+  mutate(victim_age = as.numeric(victim_age)) #"Unknown" age converted into NAs
+
+#Omit data entry error "Tulsa-AL"
+which(homicide == "Tul-000769", arr.ind=TRUE) #find row number
+homicide <- homicide[-c(38414),]
+```
+```{r baltimore}
+baltimore <- filter(homicide, city=="Baltimore") #Create a subset of the dataset homicide for just Baltimore observations.
+
+baltimore_glm <- glm(solved~victim_age+victim_sex+victim_race, data=baltimore, family = binomial()) #Set up regression model
+
+#Interpret results of regression model
+baltimore_glm |>
+  broom::tidy() |>
+  mutate(OR = exp(estimate), 
+         conf_lower = confint(baltimore_glm)[,1], #Confidence interval bounds
+         conf_upper = confint(baltimore_glm)[,2]) |>
+  filter(term == "victim_sexMale") |> #filter to adjusted odds ratio based on sex
+  knitr::kable(digits = 3) 
+```
+```{r cities glm function}
+#Define regression function 
+city_glm = function(city) {
+  city_glmdata =  filter(homicide, city_state == "city")
+  glm_city = glm(solved~solved~victim_age+victim_sex+victim_race, data=city_glmdata, family=binomial())
+  
+  glm_city |>
+  broom::tidy() |>
+  mutate(OR = exp(estimate), 
+         conf_lower = confint(glm_city)[,1],
+         conf_upper = confint(glm_city)[,2]) |>
+  filter(term == "victim_sexMale") |>
+  knitr::kable(digits = 3) 
+}
 
 ```
 
+```{r cities glm iteration}
+map(city_state, city_glmdata)
+```
 ## Question 3
 ```{r birthweight}
 #Variable selection using stepwise criteria
