@@ -36,7 +36,33 @@ set.seed(8105) #set seed for randomization
 ```
 ## Question 1
 ```{r weather}
+weather_bootstrap = weather_df |> 
+  modelr::bootstrap(n = 5000) |>
+  pull(strap) |> 
+  nth(1) |> 
+  as_tibble()
 
+boot_sample = function(df) {
+  sample_frac(df, replace = TRUE)
+}
+bootstrap_samples = 
+  tibble(strap_number = 1:5000) |> 
+  mutate(
+    sample = map(strap_number, \(i) boot_sample(df = weather_df))
+  )
+
+
+weather_df |> 
+  modelr::bootstrap(n = 5000) |> 
+  mutate(
+    models = map(strap, \(df) lm(tmax ~ tmin, data = df) ),
+    results = map(models, broom::tidy)) |> 
+  dplyr::select(-strap, -models) |> 
+  unnest(results) |> 
+  group_by(term) |> 
+  summarize(r2 = pull(var=r.squared,broom::glance(lm(tmax ~ tmin, data=weather_df))))
+
+log(broom::tidy(lm(tmax ~ tmin, data=weather_df))[1,2] * broom::tidy(lm(tmax ~ tmin, data=weather_df))[2,2])
 ```
 
 ## Question 2
