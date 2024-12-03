@@ -8,6 +8,12 @@ output: github_document
 ```{r setup, include=FALSE}
 library(tidyverse) #Load libraries
 library(MASS) #load Mass library for variable selection
+#libraries for cross validation
+library(modelr)
+library(mgcv)
+library(SemiPar)
+
+#for NOAA data
 remotes::install_github("ropensci/rnoaa")
 
 #Import data
@@ -70,7 +76,7 @@ baltimore_glm |>
 ```{r cities glm function}
 #Define regression function 
 city_glm = function(city) {
-  city_glmdata =  filter(homicide, city_state == "city")
+  city_glmdata =  filter(homicide, city_state == city)
   glm_city = glm(solved~solved~victim_age+victim_sex+victim_race, data=city_glmdata, family=binomial())
   
   glm_city |>
@@ -85,13 +91,44 @@ city_glm = function(city) {
 ```
 
 ```{r cities glm iteration}
-map(city_state, city_glmdata)
+homicide_cities = distinct(homicide["city_state"]) #list of cities to iterate over
+output = vector("list", length = nrow(homicide_cities)) #output list
+
+purrr::map(homicide_cities, city_glm)
 ```
 ## Question 3
 ```{r birthweight}
-#Variable selection using stepwise criteria
-birthw_full <- lm(bwt~.,data=birthweight)
-birthw_stepwise <- stepAIC(birthw_full, direction = "both", trace = FALSE)
-
-summary(birthw_stepwise)
+#Model with birth length and gestational age
+birthw_lengthage <- lm(bwt~blength+gaweeks, data=birthweight)
+summary(birthw_lengthage)
+#Model with head circumference, length, sex, and interactions
+birthw_interactions <- lm(bwt~bhead+blength+babysex+bhead*blength+blength*babysex+bhead*babysex+bhead*babysex*blength, data=birthweight)
+summary(birthw_interactions)
 ```
+```{r bwt design}
+#Proposed design model
+#Variable selection using stepwise criteria and AIC/BIC criterion
+birthw_full <- lm(bwt~.,data=birthweight)
+birthw_stepwise <- stepAIC(birthw_full, direction = "both", trace = FALSE, k=2)
+birthw_stepwise_bic <- stepAIC(birthw_full, direction = "both", trace = FALSE, k=log(4342))
+
+#model selection
+birthw_aic <- lm(bwt ~ babysex + bhead + blength + delwt + fincome + 
+    gaweeks + menarche + mheight + momage + mrace + parity + 
+    ppwt + smoken, data = birthweight)
+summary(birthw_aic)
+
+birthw_bic <- lm(bwt ~ babysex + bhead + blength + delwt + fincome + 
+    gaweeks + mrace + ppwt + smoken, data = birthweight)
+summary(birthw_bic)
+
+```
+I used the AIC and BIC criteria to select variables from the full model based on the lowest AIC or BIC value. Since the BIC-minimized model has a higher R-squared but less variables than the AIC-minimized model (less overfitting), I would go with the BIC model for this problem.
+```{r fitted residual}
+birthweight = add_predictions(birthweight, birthw_bic) #add fitted values
+birthweight = add_residuals(birthweight, birthw_bic) #add residual values
+
+#fitted vs. residual plot
+ggplot(data=birthweight)+aes(x=pred, y=resid)+geom_point() + labs(title="Fitted vs. Residual Values")+xlab("Fitted Values")+ylab("Residual Values")
+```
+My proposed model has a higher R-squared and adjusted R-squared than the two previous models birthw_lengthage and birthw_interactions
