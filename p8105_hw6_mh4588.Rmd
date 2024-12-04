@@ -55,14 +55,16 @@ bootstrap_samples =
 weather_df |> 
   modelr::bootstrap(n = 5000) |> 
   mutate(
-    models = map(strap, \(df) lm(tmax ~ tmin, data = df) ),
-    results = map(models, broom::tidy)) |> 
-  dplyr::select(-strap, -models) |> 
+    models = map(strap, \(i) lm(tmax ~ tmin, data = weather_df) ),
+    results = map(models, broom::glance)
+    ) |> 
+  #dplyr::select(-strap, -models) |> 
   unnest(results) |> 
-  group_by(term) |> 
-  summarize(r2 = pull(var=r.squared,broom::glance(lm(tmax ~ tmin, data=weather_df))))
-
-log(broom::tidy(lm(tmax ~ tmin, data=weather_df))[1,2] * broom::tidy(lm(tmax ~ tmin, data=weather_df))[2,2])
+  #group_by(id) |> 
+  mutate(r2 = pull(var=r.squared,broom::glance(models))), 
+b0b1 = log(broom::tidy(lm(tmax ~ tmin, data=weather_df))[1,2] * broom::tidy(lm(tmax ~ tmin, data=weather_df))[2,2])) |>
+  
+  knitr::kable(digits = 3)
 ```
 
 ## Question 2
@@ -74,17 +76,21 @@ homicide =  mutate(city_state = paste(city, state, sep=', '), homicide) |> #Crea
   filter(city_state != c("Dallas, TX","Phoenix, AZ","Kansas City, MO")) |> #Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO
    mutate(
      solved = case_when(
-      disposition == c("Closed by arrest", "Closed without arrest") ~ 1, 
+      disposition == "Closed by arrest" ~ 1, 
+      disposition =="Closed without arrest" ~ 1, 
       disposition == "Open/No arrest" ~ 0)
      ) #Convert solved/unsolved to binary variable
 
 homicide = filter(homicide, victim_race == "White"| victim_race == "Black") |> #Select victim_race to only have observations where victim_race is white or black
-  mutate(victim_age = as.numeric(victim_age)) #"Unknown" age converted into NAs
+  mutate(victim_age = as.numeric(victim_age)) |> #"Unknown" age converted into NAs
+ mutate(victim_sex = as.factor(victim_sex)) |>
+ mutate(victim_race = as.factor(victim_race))
 
 #Omit data entry error "Tulsa-AL"
 which(homicide == "Tul-000769", arr.ind=TRUE) #find row number
 homicide <- homicide[-c(38414),]
 ```
+
 ```{r baltimore}
 baltimore <- filter(homicide, city=="Baltimore") #Create a subset of the dataset homicide for just Baltimore observations.
 
@@ -101,15 +107,15 @@ baltimore_glm |>
 ```
 ```{r cities glm function}
 #Define regression function 
-city_glm = function(city) {
-  city_glmdata =  filter(homicide, city_state == city)
-  glm_city = glm(solved~solved~victim_age+victim_sex+victim_race, data=city_glmdata, family=binomial())
+city_reg = function(city) {
+  city_data =  filter(homicide, city_state == city)
+  reg = lm(solved~victim_age+victim_sex+victim_race, data=city_data)
   
-  glm_city |>
+  reg |>
   broom::tidy() |>
   mutate(OR = exp(estimate), 
-         conf_lower = confint(glm_city)[,1],
-         conf_upper = confint(glm_city)[,2]) |>
+         conf_lower = confint(reg)[,1],
+         conf_upper = confint(reg)[,2]) |>
   filter(term == "victim_sexMale") |>
   knitr::kable(digits = 3) 
 }
@@ -117,10 +123,11 @@ city_glm = function(city) {
 ```
 
 ```{r cities glm iteration}
-homicide_cities = distinct(homicide["city_state"]) #list of cities to iterate over
-output = vector("list", length = nrow(homicide_cities)) #output list
+homicide_cities = distinct(homicide["city_state"])
+homicide_cities =  as.matrix(unlist(homicide_cities)) #list of cities to iterate over
+output = vector("list", length = length(homicide_cities)) #output list
 
-purrr::map(homicide_cities, city_glm)
+purrr::map(homicide_cities, city_reg)
 ```
 ## Question 3
 
